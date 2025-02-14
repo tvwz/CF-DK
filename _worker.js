@@ -5,29 +5,21 @@ let hub_host = 'registry-1.docker.io';
 // Docker认证服务器地址
 const auth_url = 'https://auth.docker.io';
 // 自定义的工作服务器地址
-let workers_url = 'https://xxx/';
+let workers_url = '';
 
-let 屏蔽爬虫UA = ['netcraft'];
+let 屏蔽爬虫UA = ['netcraft', 'golang', 'python'];
 
 // 根据主机名选择对应的上游地址
 function routeByHosts(host) {
 	// 定义路由表
 	const routes = {
 		// 生产环境
-		"quay": "quay.io",
-		"gcr": "gcr.io",
-		"k8s-gcr": "k8s.gcr.io",
-		"k8s": "registry.k8s.io",
-		"ghcr": "ghcr.io",
-		"cloudsmith": "docker.cloudsmith.io",
-		"nvcr": "nvcr.io",
-		
-		// 测试环境
-		"test": "registry-1.docker.io",
+		"/v1/search": "registry.hub.docker.com",
+		"/token": auth_url
 	};
 
-	if (host in routes) return [ routes[host], false ];
-	else return [ hub_host, true ];
+	if (host in routes) return [routes[host], false];
+	else return [hub_host, true];
 }
 
 /** @type {RequestInit} */
@@ -66,7 +58,7 @@ function newUrl(urlStr) {
 function isUUID(uuid) {
 	// 定义一个正则表达式来匹配 UUID 格式
 	const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[4][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-	
+
 	// 使用正则表达式测试 UUID 字符串
 	return uuidRegex.test(uuid);
 }
@@ -102,90 +94,24 @@ async function nginx() {
 	return text;
 }
 
-async function searchInterface() {
-	const text = `
-	<!DOCTYPE html>
-	<html>
-	<head>
-		<title>Docker Hub Search</title>
-		<style>
-		body {
-			font-family: Arial, sans-serif;
-			display: flex;
-			flex-direction: column;
-			align-items: center;
-			justify-content: center;
-			height: 100vh;
-			margin: 0;
-			background: linear-gradient(to right, rgb(28, 143, 237), rgb(29, 99, 237));
+async function getToken(target) {
+	// console.log('auth',`https://auth.docker.io/token?service=registry.docker.io&scope=repository:${target}:*`)
+	const response = await fetch(`https://auth.docker.io/token?service=registry.docker.io&scope=repository:${target}:*`, {
+		method: 'GET',
+		headers: {
+			'Host': 'auth.docker.io',
+			'Accept': '*/*',
+			'Accept-Encoding': 'gzip, br'
 		}
-		.logo {
-			margin-bottom: 20px;
-		}
-		.search-container {
-			display: flex;
-			align-items: center;
-		}
-		#search-input {
-			padding: 10px;
-			font-size: 16px;
-			border: 1px solid #ddd;
-			border-radius: 4px;
-			width: 300px;
-			margin-right: 10px;
-		}
-		#search-button {
-			padding: 10px;
-			background-color: rgba(255, 255, 255, 0.2); /* 设置白色，透明度为10% */
-			border: none;
-			border-radius: 4px;
-			cursor: pointer;
-			width: 44px;
-			height: 44px;
-			display: flex;
-			align-items: center;
-			justify-content: center;
-		}			
-		#search-button svg {
-			width: 24px;
-			height: 24px;
-		}
-		</style>
-	</head>
-	<body>
-		<div class="logo">
-		<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 18" fill="#ffffff" width="100" height="75">
-			<path d="M23.763 6.886c-.065-.053-.673-.512-1.954-.512-.32 0-.659.03-1.01.087-.248-1.703-1.651-2.533-1.716-2.57l-.345-.2-.227.328a4.596 4.596 0 0 0-.611 1.433c-.23.972-.09 1.884.403 2.666-.596.331-1.546.418-1.744.42H.752a.753.753 0 0 0-.75.749c-.007 1.456.233 2.864.692 4.07.545 1.43 1.355 2.483 2.409 3.13 1.181.725 3.104 1.14 5.276 1.14 1.016 0 2.03-.092 2.93-.266 1.417-.273 2.705-.742 3.826-1.391a10.497 10.497 0 0 0 2.61-2.14c1.252-1.42 1.998-3.005 2.553-4.408.075.003.148.005.221.005 1.371 0 2.215-.55 2.68-1.01.505-.5.685-.998.704-1.053L24 7.076l-.237-.19Z"></path>
-			<path d="M2.216 8.075h2.119a.186.186 0 0 0 .185-.186V6a.186.186 0 0 0-.185-.186H2.216A.186.186 0 0 0 2.031 6v1.89c0 .103.083.186.185.186Zm2.92 0h2.118a.185.185 0 0 0 .185-.186V6a.185.185 0 0 0-.185-.186H5.136A.185.185 0 0 0 4.95 6v1.89c0 .103.083.186.186.186Zm2.964 0h2.118a.186.186 0 0 0 .185-.186V6a.186.186 0 0 0-.185-.186H8.1A.185.185 0 0 0 7.914 6v1.89c0 .103.083.186.186.186Zm2.928 0h2.119a.185.185 0 0 0 .185-.186V6a.185.185 0 0 0-.185-.186h-2.119a.186.186 0 0 0-.185.186v1.89c0 .103.083.186.185.186Zm-5.892-2.72h2.118a.185.185 0 0 0 .185-.186V3.28a.186.186 0 0 0-.185-.186H5.136a.186.186 0 0 0-.186.186v1.89c0 .103.083.186.186.186Zm2.964 0h2.118a.186.186 0 0 0 .185-.186V3.28a.186.186 0 0 0-.185-.186H8.1a.186.186 0 0 0-.186.186v1.89c0 .103.083.186.186.186Zm2.928 0h2.119a.185.185 0 0 0 .185-.186V3.28a.186.186 0 0 0-.185-.186h-2.119a.186.186 0 0 0-.185.186v1.89c0 .103.083.186.185.186Zm0-2.72h2.119a.186.186 0 0 0 .185-.186V.56a.185.185 0 0 0-.185-.186h-2.119a.186.186 0 0 0-.185.186v1.89c0 .103.083.186.185.186Zm2.955 5.44h2.118a.185.185 0 0 0 .186-.186V6a.185.185 0 0 0-.186-.186h-2.118a.185.185 0 0 0-.185.186v1.89c0 .103.083.186.185.186Z"></path>
-		</svg>
-		</div>
-		<div class="search-container">
-		<input type="text" id="search-input" placeholder="Search Docker Hub">
-		<button id="search-button">
-			<svg focusable="false" aria-hidden="true" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-			<path d="M21 21L16.65 16.65M19 11C19 15.4183 15.4183 19 11 19C6.58172 19 3 15.4183 3 11C3 6.58172 6.58172 3 11 3C15.4183 3 19 6.58172 19 11Z" stroke="white" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path>
-			</svg>
-		</button>
-		</div>
-		<script>
-		function performSearch() {
-			const query = document.getElementById('search-input').value;
-			if (query) {
-			window.location.href = '/search?q=' + encodeURIComponent(query);
-			}
-		}
-	
-		document.getElementById('search-button').addEventListener('click', performSearch);
-		document.getElementById('search-input').addEventListener('keypress', function(event) {
-			if (event.key === 'Enter') {
-			performSearch();
-			}
-		});
-		</script>
-	</body>
-	</html>
-	`;
-	return text;
+	});
+
+	if (!response.ok) {
+		throw new Error('Failed to get token: ' + response.statusText);
+	}
+
+	const data = await response.json();
+	// console.log('token', data.token)
+	return data.token.toString().trim(); // 返回 token
 }
 
 export default {
@@ -198,27 +124,12 @@ export default {
 		if (env.UA) 屏蔽爬虫UA = 屏蔽爬虫UA.concat(await ADD(env.UA));
 		workers_url = `https://${url.hostname}`;
 		const pathname = url.pathname;
+		// console.log('path',pathname)
+		let checkHost = routeByHosts(pathname);
+		hub_host = checkHost[0];
 
-		// 获取请求参数中的 ns
-		const ns = url.searchParams.get('ns'); 
-		const hostname = url.searchParams.get('hubhost') || url.hostname;
-		const hostTop = hostname.split('.')[0]; // 获取主机名的第一部分
-
-		let checkHost; // 在这里定义 checkHost 变量
-		// 如果存在 ns 参数，优先使用它来确定 hub_host
-		if (ns) {
-			if (ns === 'docker.io') {
-				hub_host = 'registry-1.docker.io'; // 设置上游地址为 registry-1.docker.io
-			} else {
-				hub_host = ns; // 直接使用 ns 作为 hub_host
-			}
-		} else {
-			checkHost = routeByHosts(hostTop);
-			hub_host = checkHost[0]; // 获取上游地址
-		}
-
-		const fakePage = checkHost ? checkHost[1] : false; // 确保 fakePage 不为 undefined
-		console.log(`域名头部: ${hostTop}\n反代地址: ${hub_host}\n伪装首页: ${fakePage}`);
+		// const fakePage = checkHost ? checkHost[1] : false; // 确保 fakePage 不为 undefined
+		const fakePage = pathname === '/'
 		const isUuid = isUUID(pathname.split('/')[1].split('/')[0]);
 
 		if (屏蔽爬虫UA.some(fxxk => userAgent.includes(fxxk)) && 屏蔽爬虫UA.length > 0) {
@@ -234,12 +145,9 @@ export default {
 			isUuid,
 			pathname.includes('/_'),
 			pathname.includes('/r/'),
-			pathname.includes('/v2/repositories'),
-			pathname.includes('/v2/user'),
-			pathname.includes('/v2/orgs'),
-			pathname.includes('/v2/_catalog'),
-			pathname.includes('/v2/categories'),
-			pathname.includes('/v2/feature-flags'),
+			pathname.includes('/v2/'),
+			pathname.includes('/v1/'),
+			pathname.includes('token'),
 			pathname.includes('search'),
 			pathname.includes('source'),
 			pathname == '/',
@@ -247,7 +155,8 @@ export default {
 			pathname == '/auth/profile',
 		];
 
-		if (conditions.some(condition => condition) && (fakePage === true || hostTop == 'docker')) {
+		if (!conditions.some(condition => condition) || (fakePage === true)) {
+			// console.log('start fake')
 			if (env.URL302) {
 				return Response.redirect(env.URL302, 302);
 			} else if (env.URL) {
@@ -259,37 +168,18 @@ export default {
 						},
 					});
 				} else return fetch(new Request(env.URL, request));
-			} else if (url.pathname == '/'){
-				return new Response(await searchInterface(), {
-					headers: {
-					  'Content-Type': 'text/html; charset=UTF-8',
-					},
-				});
 			}
-			
-			const newUrl = new URL("https://registry.hub.docker.com" + pathname + url.search);
+		}
 
-			// 复制原始请求的标头
-			const headers = new Headers(request.headers);
-
-			// 确保 Host 头部被替换为 hub.docker.com
-			headers.set('Host', 'registry.hub.docker.com');
-
-			const newRequest = new Request(newUrl, {
-					method: request.method,
-					headers: headers,
-					body: request.method !== 'GET' && request.method !== 'HEAD' ? await request.blob() : null,
-					redirect: 'follow'
-			});
-
-			return fetch(newRequest);
+		if (pathname.includes('/v1/search') && url.search.includes('library/') && !url.search.match(/library\/(&|$)/)) {
+			url.search = url.search.replace('library/', '');
 		}
 
 		// 修改包含 %2F 和 %3A 的请求
 		if (!/%2F/.test(url.search) && /%3A/.test(url.toString())) {
 			let modifiedUrl = url.toString().replace(/%3A(?=.*?&)/, '%3Alibrary%2F');
 			url = new URL(modifiedUrl);
-			console.log(`handle_url: ${url}`);
+			// console.log(`handle_url: ${url}`);
 		}
 
 		// 处理token请求
@@ -309,12 +199,6 @@ export default {
 			return fetch(new Request(token_url, request), token_parameter);
 		}
 
-		// 修改 /v2/ 请求路径
-		if ( hub_host == 'registry-1.docker.io' && /^\/v2\/[^/]+\/[^/]+\/[^/]+$/.test(url.pathname) && !/^\/v2\/library/.test(url.pathname)) {
-			//url.pathname = url.pathname.replace(/\/v2\//, '/v2/library/');
-			url.pathname = '/v2/library/' + url.pathname.split('/v2/')[1];
-			console.log(`modified_url: ${url.pathname}`);
-		}
 
 		// 更改请求的主机名
 		url.hostname = hub_host;
@@ -338,9 +222,56 @@ export default {
 			parameter.headers.Authorization = getReqHeader("Authorization");
 		}
 
+		if (/^\/v2\/[^/]+\/[^/]+\/list$/.test(url.pathname) && !/^\/v2\/library/.test(url.pathname)) {
+			const parts = url.pathname.split('/');
+			const repository = parts[2]; // 提取命名空间
+			const tags = parts[3]; // 提取仓库名
+			url.pathname = `/v2/library/${repository}/${tags}/list`;
+			// console.log(`search_url_1: ${url.pathname}`);
+			const token = await getToken(`library/${repository}`)
+			url.hostname = 'index.docker.io'
+			parameter.headers.Host = url.hostname
+			parameter.headers.Authorization = `Bearer ${token}`
+		}
+		else if (/^\/v2\/[^/]+\/[^/]+\/[^/]+\/list$/.test(url.pathname) && !/^\/v2\/library/.test(url.pathname)) {
+			const parts = url.pathname.split('/');
+			const namespace = parts[2]
+			const repository = parts[3]; // 提取命名空间
+			const tags = parts[4]; // 提取仓库名
+			url.pathname = `/v2/${namespace}/${repository}/${tags}/list`;
+			// console.log(`search_url_2: ${url.pathname}`);
+			const token = await getToken(`${namespace}/${repository}`)
+			url.hostname = 'index.docker.io'
+			parameter.headers.Host = url.hostname
+			parameter.headers.Authorization = `Bearer ${token}`
+		}
+		else if (hub_host == 'registry-1.docker.io' && /^\/v2\/[^/]+\/[^/]+\/[^/]+$/.test(url.pathname) && !/^\/v2\/library/.test(url.pathname)) {
+			//url.pathname = url.pathname.replace(/\/v2\//, '/v2/library/');
+			url.pathname = '/v2/library/' + url.pathname.split('/v2/')[1];
+			// console.log(`modified_url: ${url.pathname}`);
+		}
 		// 发起请求并处理响应
-		let original_response = await fetch(new Request(url, request), parameter);
+		const r = {
+			method: request.method,
+			headers: {
+				...parameter.headers
+			}
+		};
+
+		const req = new Request(url, r);
+		// console.log('Url',JSON.stringify(url,null,2))
+		// console.log('Request', req.url, JSON.stringify(parameter.headers, null, 2))
+
+		let original_response = await fetch(req);
+		// console.log('Response Status:', original_response.status);
+
+		// let original_response = await fetch(new Request(url, request), parameter);
 		let original_response_clone = original_response.clone();
+
+		// 获取响应体
+		// const responseBody = await original_response.text();
+		// console.log('Response Body:', responseBody);
+
 		let original_text = original_response_clone.body;
 		let response_headers = original_response.headers;
 		let new_response_headers = new Headers(response_headers);
